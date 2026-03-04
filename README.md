@@ -1,53 +1,273 @@
-# Text-Based-Simple-Bank-System
-This documentation outlines a structural plan for your Banking System project. It is designed to be portfolio-ready, suitable for an undergraduate Computer Science profile, and tailored for a C++ environment using VS Code on macOS.
-Project Name: C++ Banking Management System (Console Application)
+# 🏦 Banking System
 
-1. Project Overview
-A command-line based application that simulates core banking operations. This project demonstrates proficiency in C++ Object-Oriented Programming (OOP), file handling for data persistence, and memory management.
-Target Environment:
-- OS: macOS (Unix-based file paths)
-- IDE/Editor: Visual Studio Code
-- Compiler: clang++ or g++ (via C++17 standard)
-1. Functional Requirements
-The system will allow users (clients) and administrators to perform the following actions:
-    - Account Creation: Generate a unique Account ID and capture user details (Name, Initial Balance, Account Type).
-    - Transactions:
-        - Deposit: Add funds to a specific account.
-        - Withdraw: Deduct funds (with validation for insufficient balance).
-    - Inquiry:
-        - Balance Check: Display current balance for a specific Account ID.
-        - Account Details: Show full account holder information.
-    - Data Persistence: Automatically save account data to a file (.txt or .csv) upon exit and load it upon startup.
-    - Account Modification: Allow updating the account holder's name or closing (deleting) the account.
-2. Technical Architecture
-Data Structures
-Given the need for efficient lookups by Account ID, a std::map or std::unordered_map is recommended over a standard vector or linked list for the main data storage.
-    - Class Account:
-        - Attributes
-            - account_name: string
-            - account_number: string
-            - balance: double
-            - password: string
-        - Methods
-            - deposit: void
-            - withdraw: bool
-            - get_balance: double
-            - get_account_name: string
-            - get_account_number: string
-            - get_password: string
-    - Class BankManager (or System)
-        - Attributes
-        - Methods
-    - Class Bank_System
-        - Attributes
-            - accounts[100]: Account class
-            - account_count: int
-            - current_account_index: int
-            - last_account_number: string
-        - Methods
-            - Add_Account: bool
-            - run: void
-            - login: void
-            - create_account: void
-            - verify_account: bool
-    -
+A command-line banking application built in **C++** with **SQLite** for persistent storage. Designed with clean object-oriented architecture — inheritance, singletons, custom exceptions, and atomic database transactions — with a clear path to a UI upgrade in the future.
+
+---
+
+## ✨ Features
+
+- **Account management** — create, approve, suspend, and manage user accounts
+- **Manager approval workflow** — account creation requests sit in a queue until a manager approves or denies them
+- **Transactions** — deposits, withdrawals, and transfers between accounts
+- **Transaction history** — every operation is persisted to SQLite and survives restarts
+- **Notifications** — users are notified of account decisions and important events on login
+- **Authentication** — session management with failed attempt tracking and account lockout
+- **Atomic transfers** — SQLite transactions ensure money is never lost mid-transfer
+
+---
+
+## 🛠️ Technologies
+
+| Technology | Purpose |
+|---|---|
+| C++ | Core language for all business logic |
+| SQLite | Persistent storage for accounts, transactions, notifications |
+| STL (`std::queue`, etc.) | Data structures for request queue and collections |
+| Custom Exceptions | Structured error handling throughout the system |
+
+---
+
+## 🏗️ Architecture
+
+### Class Hierarchy
+
+```
+Bank  (Singleton — main system coordinator)
+├── MasterAccount  (Singleton — manager/admin)
+├── UserAccount(s)
+├── TransactionManager
+├── AuthenticationManager
+└── Notification System
+    ├── InAppNotification
+    ├── EmailNotification       [future]
+    └── SMSNotification         [future]
+
+Account  (base class)
+├── UserAccount
+└── MasterAccount
+```
+
+---
+
+### `Account` — Base Class
+
+Shared by both `UserAccount` and `MasterAccount`.
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | `string` | Full name |
+| `accountId` | `int` | Auto-generated via SQLite `AUTOINCREMENT` |
+| `password` | `string` | Hashed — never stored as plain text |
+| `balance` | `double` | Current balance |
+| `status` | `enum` | `pending` \| `active` \| `suspended` |
+| `phoneNumber` | `string` | Contact number |
+| `email` | `string` | Email address |
+| `address` | `string` | Physical address (optional) |
+
+---
+
+### `UserAccount` — extends `Account`
+
+Represents a regular bank user.
+
+- Deposit, withdrawal, and transfer operations
+- Balance validation before withdrawals and transfers
+- Personal transaction history
+- Notification inbox (unread/read)
+
+---
+
+### `MasterAccount` — extends `Account` · Singleton
+
+Represents the bank manager. Only one instance ever exists.
+
+- Holds a `std::queue<Request>` of pending account creation requests
+- Approves or denies requests and notifies users of decisions
+- Views and manages all accounts in the system
+- Can suspend accounts
+
+---
+
+### `TransactionManager`
+
+Handles all financial operations and interfaces with SQLite.
+
+- Validates input (amount must be positive, numeric, within range)
+- Executes deposits, withdrawals, and transfers
+- Atomic transfers using SQLite `BEGIN / COMMIT / ROLLBACK` — all or nothing
+- Saves every `Transaction` record to the database
+
+---
+
+### `AuthenticationManager`
+
+Handles login and session state, separate from account data.
+
+- Login with Account ID and hashed password
+- Tracks failed login attempts per account
+- Locks accounts after too many failed attempts
+- Maintains current session pointer
+
+---
+
+### `Notification` — Base Class
+
+```
+Notification  (base)
+├── InAppNotification       ← implemented
+├── EmailNotification       ← future (libcurl)
+└── SMSNotification         ← future (Twilio API)
+```
+
+Built with the **Open/Closed Principle** — adding email or SMS later requires no changes to existing code.
+
+| Field | Type | Notes |
+|---|---|---|
+| `receiverId` | `int` | Recipient account ID |
+| `message` | `string` | Notification content |
+| `timestamp` | `string` | ISO 8601 datetime |
+| `status` | `enum` | `unread` \| `read` |
+| `deliveryMethod` | `enum` | `in-app` \| `email` \| `sms` |
+
+---
+
+### `Bank` — Main System · Singleton
+
+The top-level coordinator. `main()` creates one `Bank` instance and hands over control.
+
+- Owns all classes and coordinates their interaction
+- Generates unique account IDs via SQLite `AUTOINCREMENT`
+- Runs the main command-line loop
+- Routes users to the correct menu after login
+- Catches all custom exceptions and displays friendly error messages
+
+---
+
+## 🗄️ Database Schema (SQLite)
+
+### `accounts`
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` |
+| `name` | `TEXT` | |
+| `password` | `TEXT` | Hashed |
+| `balance` | `REAL` | |
+| `status` | `TEXT` | `pending` \| `active` \| `suspended` |
+| `phone` | `TEXT` | |
+| `email` | `TEXT` | |
+| `address` | `TEXT` | Nullable |
+
+### `transactions`
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` |
+| `type` | `TEXT` | `deposit` \| `withdrawal` \| `transfer` |
+| `amount` | `REAL` | |
+| `sender_id` | `INTEGER` | FK → `accounts.id` |
+| `receiver_id` | `INTEGER` | FK → `accounts.id` (nullable) |
+| `timestamp` | `TEXT` | ISO 8601 |
+| `status` | `TEXT` | `success` \| `failed` |
+
+### `notifications`
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` |
+| `receiver_id` | `INTEGER` | FK → `accounts.id` |
+| `message` | `TEXT` | |
+| `timestamp` | `TEXT` | ISO 8601 |
+| `status` | `TEXT` | `unread` \| `read` |
+| `delivery_method` | `TEXT` | `in-app` \| `email` \| `sms` |
+
+### `requests`
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` |
+| `name` | `TEXT` | |
+| `email` | `TEXT` | |
+| `phone` | `TEXT` | |
+| `address` | `TEXT` | Nullable |
+| `timestamp` | `TEXT` | ISO 8601 |
+| `status` | `TEXT` | `pending` \| `approved` \| `denied` |
+
+---
+
+## 🔄 Workflows
+
+### Account Creation
+1. User submits account request from the login screen
+2. Input is validated — required fields checked
+3. Request saved to `requests` table and added to `MasterAccount`'s queue
+4. Manager reviews the queue and approves or denies
+5. On **approval** — `UserAccount` is created with an auto-generated ID, status set to `active`
+6. On **denial** — request is marked denied, no account created
+7. `InAppNotification` created and saved for the user
+8. User sees the notification on their next login
+
+### Login
+1. User enters Account ID and password
+2. `AuthenticationManager` looks up the account in SQLite
+3. If account is locked → `AuthenticationException` thrown, login blocked
+4. If password is wrong → failed attempt counter incremented; account locked at threshold
+5. If valid → session established, user routed to correct menu
+6. Unread notifications displayed immediately
+
+### Transactions (Deposit / Withdrawal / Transfer)
+1. User selects transaction type and enters amount
+2. `TransactionManager` validates input (positive, numeric, in range)
+3. `UserAccount` validates sufficient balance (withdrawals and transfers)
+4. For transfers — target account looked up and confirmed active
+5. SQLite `BEGIN TRANSACTION`
+6. Balances updated in both accounts
+7. `Transaction` record written to database
+8. `COMMIT` on success — `ROLLBACK` on any failure (atomic, no partial state)
+9. User sees updated balance and confirmation message
+
+---
+
+## ⚠️ Error Handling
+
+Custom exception classes are thrown throughout the system and caught at the `Bank` level for friendly display.
+
+| Exception | Thrown When |
+|---|---|
+| `InsufficientFundsException` | Balance too low for withdrawal or transfer |
+| `InvalidInputException` | Amount is zero, negative, or non-numeric; empty required fields |
+| `AccountNotFoundException` | Account ID does not exist in the system |
+| `DatabaseException` | SQLite read/write operation fails |
+| `AuthenticationException` | Wrong password, account locked, or no active session |
+
+---
+
+## 🗺️ Roadmap
+
+### Phase 1 — CLI (current)
+- [x] System design and architecture
+- [ ] `Account` base class
+- [ ] `UserAccount` and `MasterAccount`
+- [ ] SQLite setup and `accounts` table
+- [ ] `AuthenticationManager`
+- [ ] `Transaction` class and `transactions` table
+- [ ] `TransactionManager` with atomic operations
+- [ ] Request queue and `requests` table
+- [ ] `InAppNotification` and `notifications` table
+- [ ] `Bank` coordinator class and CLI loop
+- [ ] Custom exception classes
+
+### Phase 2 — Notifications
+- [ ] `EmailNotification` via libcurl
+- [ ] `SMSNotification` via Twilio API
+
+### Phase 3 — Security
+- [ ] Password hashing (bcrypt or SHA-256)
+- [ ] Password reset flow
+- [ ] Session timeout after inactivity
+
+### Phase 4 — UI
+- [ ] Replace CLI loop with Qt UI
+- [ ] Business logic classes remain unchanged
+
+---
+
+## 📄 License
+
+This project is for personal learning and portfolio purposes.
